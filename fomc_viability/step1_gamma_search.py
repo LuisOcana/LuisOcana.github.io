@@ -46,7 +46,12 @@ EXCLUDE_RE = re.compile(
 
 
 def fetch_keyword(kw: str) -> list[dict]:
-    """Fetch up to 500 markets for a keyword via pagination."""
+    """Fetch up to 500 markets for a keyword via pagination.
+
+    Tries `q=` first; if Gamma returns 0 results, falls back to client-side
+    filtering via a global listing (active + closed) so a search-API change
+    doesn't silently drop the dataset.
+    """
     results = []
     offset = 0
     limit = 100
@@ -56,6 +61,7 @@ def fetch_keyword(kw: str) -> list[dict]:
                 GAMMA_URL,
                 params={"q": kw, "limit": limit, "offset": offset},
                 timeout=30,
+                headers={"User-Agent": "fomc-viability/1.0 (+github actions)"},
             )
             r.raise_for_status()
             batch = r.json()
@@ -70,6 +76,59 @@ def fetch_keyword(kw: str) -> list[dict]:
         offset += limit
         time.sleep(0.3)
     return results
+
+
+def fallback_global_scan(max_pages: int = 30) -> list[dict]:
+    """Global scan + client-side keyword filter — used if `q=` returns nothing."""
+    out = []
+    offset = 0
+    limit = 500
+    pat = re.compile(r"\b(fed|fomc|federal reserve)\b", re.IGNORECASE)
+    for _ in range(max_pages):
+        try:
+            r = requests.get(
+                GAMMA_URL,
+                params={"limit": limit, "offset": offset, "closed": "false"},
+                timeout=30,
+                headers={"User-Agent": "fomc-viability/1.0 (+github actions)"},
+            )
+            r.raise_for_status()
+            batch = r.json()
+        except Exception as e:
+            print(f"  fallback ERROR offset={offset}: {e}")
+            break
+        if not isinstance(batch, list) or not batch:
+            break
+        for m in batch:
+            q = (m.get("question") or "")
+            if pat.search(q):
+                out.append(m)
+        offset += limit
+        time.sleep(0.3)
+    # Also pull closed/resolved
+    offset = 0
+    for _ in range(max_pages):
+        try:
+            r = requests.get(
+                GAMMA_URL,
+                params={"limit": limit, "offset": offset, "closed": "true"},
+                timeout=30,
+                headers={"User-Agent": "fomc-viability/1.0 (+github actions)"},
+            )
+            r.raise_for_status()
+            batch = r.json()
+        except Exception as e:
+            print(f"  fallback(closed) ERROR offset={offset}: {e}")
+            break
+        if not isinstance(batch, list) or not batch:
+            break
+        for m in batch:
+            q = (m.get("question") or "")
+            if pat.search(q):
+                out.append(m)
+        offset += limit
+        time.sleep(0.3)
+    return out
 
 
 def is_fomc_relevant(question: str) -> tuple[bool, str]:
@@ -173,7 +232,16 @@ def main():
         cid = m.get("conditionId") or m.get("condition_id")
         if cid and cid not in seen:
             seen[cid] = m
-    print(f"\nTotal unique markets across keywords: {len(seen)}")
+    print(f"\nTotal unique markets across keyword search: {len(seen)}")
+
+    # If keyword search returned nothing useful, fall back to a global scan
+    if len(seen) < 5:
+        print("\n[fallback] keyword search yielded <5 markets, switching to global scan")
+        for m in fallback_global_scan():
+            cid = m.get("conditionId") or m.get("condition_id")
+            if cid and cid not in seen:
+                seen[cid] = m
+        print(f"  after fallback: {len(seen)} unique markets")
 
     # Filter for FOMC relevance
     relevant = []

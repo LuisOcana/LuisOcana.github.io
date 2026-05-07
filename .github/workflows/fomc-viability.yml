@@ -1,0 +1,78 @@
+name: FOMC viability analysis
+
+on:
+  push:
+    branches: [claude/fomc-viability-analysis-gWgOc]
+    paths:
+      - 'fomc_viability/**'
+      - '.github/workflows/fomc-viability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fomc-viability-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install requests pandas tabulate matplotlib
+
+      - name: Step 1 — Gamma API search
+        run: python fomc_viability/step1_gamma_search.py
+        continue-on-error: true
+
+      - name: Step 2 — Calendar + market join
+        run: python fomc_viability/step2_meeting_calendar.py
+        continue-on-error: true
+
+      - name: Step 3 — CLOB price history sample
+        run: python fomc_viability/step3_clob_price_history.py
+        continue-on-error: true
+
+      - name: Step 4 — CME FedWatch / FRED probe
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python fomc_viability/step4_cme_fedwatch.py
+        continue-on-error: true
+
+      - name: Step 5 — Multi-outcome structure probe
+        run: python fomc_viability/step5_multi_outcome.py
+        continue-on-error: true
+
+      - name: Show summaries
+        run: |
+          echo "=== step1_summary.json ==="; cat fomc_viability/step1_summary.json || true
+          echo "=== step2_summary.json ==="; cat fomc_viability/step2_summary.json || true
+          echo "=== step3_summary.json ==="; cat fomc_viability/step3_summary.json || true
+          echo "=== step4_summary.json ==="; cat fomc_viability/step4_summary.json || true
+          echo "=== multi_outcome_sample.json (head) ==="; head -c 4000 fomc_viability/multi_outcome_sample.json || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fomc-viability-outputs
+          path: fomc_viability/
+
+      - name: Commit results back to branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fomc_viability/
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+            exit 0
+          fi
+          git commit -m "ci: refresh fomc_viability outputs from live APIs [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}

@@ -30,16 +30,27 @@ Output:
 """
 
 import json
+import os
 from pathlib import Path
 
 import requests
 
 OUT_DIR = Path(__file__).parent
 
+FRED_KEY = os.environ.get("FRED_API_KEY", "").strip()
+# Use a real series id that exists year-round — DFF (effective fed funds rate)
+# is a stable smoke-test for FRED auth. ZQ futures series exist as ZQK24, ZQM24,
+# etc., but availability depends on contract month.
+FRED_SMOKE = (
+    f"https://api.stlouisfed.org/fred/series/observations?series_id=DFF&api_key={FRED_KEY}&file_type=json&limit=1"
+    if FRED_KEY else
+    "https://api.stlouisfed.org/fred/series/observations?series_id=DFF&api_key=MISSING&file_type=json&limit=1"
+)
+
 PROBES = [
     ("cme_internal", "https://www.cmegroup.com/services/fed-watch"),
     ("cme_widget",  "https://www.cmegroup.com/CmeWS/mvc/Quotes/Future/305/G"),  # ZQ contracts
-    ("fred_api",    "https://api.stlouisfed.org/fred/series/observations?series_id=ZQK24&api_key=DEMO&file_type=json"),
+    ("fred_api",    FRED_SMOKE),
     ("fed_calendar","https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"),
 ]
 
@@ -71,6 +82,7 @@ def main():
         "cme_direct_reachable": cme_reachable,
         "fred_reachable": fred_reachable,
         "fed_calendar_reachable": fed_reachable,
+        "fred_api_key_provided": bool(FRED_KEY),
         "recommendation": None,
         "notes": [],
     }

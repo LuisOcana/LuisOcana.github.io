@@ -107,50 +107,65 @@ def evaluate_coverage(history: dict, statement_date: datetime) -> dict:
     }
 
 
+def extract_yes_token(tokens_field, outcomes_field) -> str | None:
+    """Pick the YES-side token id from clobTokenIds, aligned with outcomes array."""
+    if not tokens_field or not outcomes_field:
+        return None
+    try:
+        tokens = json.loads(tokens_field) if isinstance(tokens_field, str) else tokens_field
+        outcomes = json.loads(outcomes_field) if isinstance(outcomes_field, str) else outcomes_field
+    except Exception:
+        return None
+    if not isinstance(tokens, list) or not isinstance(outcomes, list):
+        return None
+    for i, o in enumerate(outcomes):
+        if isinstance(o, str) and o.strip().lower() == "yes" and i < len(tokens):
+            return str(tokens[i])
+    # fallback: first token
+    return str(tokens[0]) if tokens else None
+
+
 def main():
     today = datetime.utcnow()
-    meetings_path = OUT_DIR / "fomc_meetings.csv"
-    if not meetings_path.exists() or pd.read_csv(meetings_path).empty:
-        print("STEP 3 BLOCKED: fomc_meetings.csv missing or empty.")
-        print("  Step 1 (Gamma API) was blocked by sandbox egress, so we have")
-        print("  no real condition_ids / token_ids to query CLOB with.")
+    markets_path = OUT_DIR / "fomc_markets_with_meeting.csv"
+    if not markets_path.exists():
+        print("STEP 3 BLOCKED: fomc_markets_with_meeting.csv missing.")
+        print("  Run step 1 + step 2 first.")
         summary = {
             "status": "blocked",
-            "blocker": "depends_on_step1_which_was_blocked_by_egress",
-            "additional_note": "CLOB endpoint clob.polymarket.com is also on the egress blocklist; even with token_ids in hand the requests would 403.",
-            "sample_picked": [],
-            "coverage": {},
-        }
-        with open(OUT_DIR / "step3_summary.json", "w") as f:
-            json.dump(summary, f, indent=2)
-        # Empty placeholder CSV with correct schema
-        pd.DataFrame(columns=["bucket", "condition_id", "question", "statement_date",
-                              "n_obs", "first_ts", "last_ts", "covered_72h", "error"]
-                     ).to_csv(OUT_DIR / "price_history_sample.csv", index=False)
-        return
-
-    meetings = pd.read_csv(meetings_path)
-    # We need yes_token_id and condition_id per meeting — caller should join in
-    # the most-liquid market per meeting from the step-1 output before running this.
-    required_cols = {"meeting_id", "statement_date", "total_volume", "yes_token_id", "condition_id", "question"}
-    missing = required_cols - set(meetings.columns)
-    if missing:
-        print(f"STEP 3 BLOCKED: meetings dataframe missing columns: {missing}")
-        print("  Run step 1 + step 2 in an environment with egress before step 3.")
-        summary = {
-            "status": "blocked",
-            "blocker": "step1_blocked_by_egress",
-            "missing_columns": sorted(missing),
-            "additional_note": "clob.polymarket.com is on the sandbox egress blocklist; even with token_ids in hand the requests would 403 from this environment.",
+            "blocker": "missing_input_fomc_markets_with_meeting.csv",
         }
         with open(OUT_DIR / "step3_summary.json", "w") as f:
             json.dump(summary, f, indent=2)
         pd.DataFrame(columns=["bucket", "condition_id", "question", "statement_date",
-                              "n_obs", "first_ts", "last_ts", "covered_72h", "error"]
+                              "ts", "p"]
                      ).to_csv(OUT_DIR / "price_history_sample.csv", index=False)
         return
 
-    sample = pick_sample(meetings, today)
+    markets = pd.read_csv(markets_path)
+    if markets.empty or "meeting_id" not in markets.columns:
+        print("STEP 3 BLOCKED: markets-with-meeting file present but empty or missing meeting_id.")
+        with open(OUT_DIR / "step3_summary.json", "w") as f:
+            json.dump({"status": "blocked", "blocker": "input_empty"}, f, indent=2)
+        return
+
+    # Resolve YES token id and join statement_date from calendar
+    cal = pd.read_csv(OUT_DIR / "fomc_meeting_calendar.csv")[["meeting_id", "statement_date"]]
+    cal["statement_date"] = pd.to_datetime(cal["statement_date"])
+    markets["yes_token_id"] = markets.apply(
+        lambda r: extract_yes_token(r.get("tokens"), r.get("outcomes")), axis=1
+    )
+    markets = markets.dropna(subset=["meeting_id"])
+    markets = markets.merge(cal, on="meeting_id", how="left")
+
+    # Most-liquid market per meeting
+    per_meeting = (
+        markets.sort_values("volume", ascending=False)
+        .drop_duplicates(subset=["meeting_id"], keep="first")
+        .rename(columns={"volume": "total_volume"})
+    )
+
+    sample = pick_sample(per_meeting, today)
     print("Sample picks:")
     for s in sample:
         print(f"  [{s['bucket']}] meeting={s.get('meeting_id')} vol={s.get('total_volume')}")
