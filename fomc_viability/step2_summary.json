@@ -1,0 +1,13 @@
+{
+  "calendar_meetings": 27,
+  "by_year": {
+    "2023": 8,
+    "2024": 8,
+    "2025": 8,
+    "2026": 3
+  },
+  "self_test_passed": true,
+  "step1_output_present": false,
+  "meetings_with_coverage": 0,
+  "meetings_with_multi_outcome": 0
+}

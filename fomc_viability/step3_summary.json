@@ -1,0 +1,10 @@
+{
+  "status": "blocked",
+  "blocker": "step1_blocked_by_egress",
+  "missing_columns": [
+    "condition_id",
+    "question",
+    "yes_token_id"
+  ],
+  "additional_note": "clob.polymarket.com is on the sandbox egress blocklist; even with token_ids in hand the requests would 403 from this environment."
+}

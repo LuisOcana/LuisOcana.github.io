@@ -1,0 +1,19 @@
+{
+  "September 2025": {
+    "status": "error",
+    "error": "403 Client Error: Forbidden for url: https://gamma-api.polymarket.com/events?q=Fed+decision+September+2025&limit=5"
+  },
+  "March 2025": {
+    "status": "error",
+    "error": "403 Client Error: Forbidden for url: https://gamma-api.polymarket.com/events?q=Fed+decision+March+2025&limit=5"
+  },
+  "September 2024": {
+    "status": "error",
+    "error": "403 Client Error: Forbidden for url: https://gamma-api.polymarket.com/events?q=Fed+decision+September+2024&limit=5"
+  },
+  "_meta": {
+    "status": "blocked",
+    "blocker": "egress_to_gamma-api.polymarket.com_denied",
+    "note": "All event lookups failed identically (HTTP 403). Run this script in an environment with internet egress to verify multi-outcome structure."
+  }
+}

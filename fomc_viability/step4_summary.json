@@ -1,0 +1,88 @@
+{
+  "probes": [
+    {
+      "label": "cme_internal",
+      "url": "https://www.cmegroup.com/services/fed-watch",
+      "status": 403,
+      "content_type": "text/plain",
+      "len": 21
+    },
+    {
+      "label": "cme_widget",
+      "url": "https://www.cmegroup.com/CmeWS/mvc/Quotes/Future/305/G",
+      "status": 403,
+      "content_type": "text/plain",
+      "len": 21
+    },
+    {
+      "label": "fred_api",
+      "url": "https://api.stlouisfed.org/fred/series/observations?series_id=ZQK24&api_key=DEMO&file_type=json",
+      "status": 403,
+      "content_type": "text/plain",
+      "len": 21
+    },
+    {
+      "label": "fed_calendar",
+      "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+      "status": 403,
+      "content_type": "text/plain",
+      "len": 21
+    }
+  ],
+  "cme_direct_reachable": false,
+  "fred_reachable": false,
+  "fed_calendar_reachable": false,
+  "recommendation": "All benchmark sources blocked from this environment. To proceed, either (a) run from a host with internet egress, (b) request FRED API key + add api.stlouisfed.org to allowlist, or (c) procure a daily snapshot dataset (e.g., via Bloomberg WIRP or a vendor).",
+  "notes": [
+    "In the sandbox where this script ran first, all hosts returned HTTP 403 with body 'Host not in allowlist' \u2014 the proxy enforces a closed allowlist."
+  ],
+  "alternatives": [
+    {
+      "name": "FRED Fed Funds Futures (ZQ contracts)",
+      "pros": [
+        "public API",
+        "daily resolution",
+        "free with API key"
+      ],
+      "cons": [
+        "must implement FedWatch methodology yourself",
+        "discrete probability allocation across rate buckets is non-trivial"
+      ],
+      "url": "https://fred.stlouisfed.org/docs/api/"
+    },
+    {
+      "name": "Bloomberg WIRP",
+      "pros": [
+        "pre-computed probabilities",
+        "intraday"
+      ],
+      "cons": [
+        "terminal license required (~$25k/yr)"
+      ],
+      "url": null
+    },
+    {
+      "name": "Manual scrape of FedWatch HTML/JS",
+      "pros": [
+        "no API key"
+      ],
+      "cons": [
+        "fragile (DOM changes)",
+        "ToS ambiguous",
+        "JS rendering needed (Playwright/Selenium)"
+      ],
+      "url": "https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html"
+    },
+    {
+      "name": "Daily snapshots from a third party (e.g., academic dataset)",
+      "pros": [
+        "already historical"
+      ],
+      "cons": [
+        "coverage may not include 2025-2026",
+        "licensing"
+      ],
+      "url": null
+    }
+  ]
+}
